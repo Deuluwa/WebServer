@@ -4,7 +4,7 @@ from deuluwa.funcs import getEndTime, getTime, tardyCheck, makeDateTime
 from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 import json
-import datetime
+from datetime import datetime, date, timedelta
 
 #사용자 로그인
 def getUserInfo(request):
@@ -109,18 +109,20 @@ def getAttendanceCheckList(request):
 def getCourseTotalInformation(request):
     try:
         inputCourseId = request.GET.get('courseid')
+        inputCourseName = request.GET.get('coursename')
         cursor = connection.cursor()
 
-        if(inputCourseId == None):
+        if inputCourseId == None and inputCourseName == None:
             command = "SELECT * FROM courseinfoview;"
-            cursor.execute(command)
-            result = cursor.fetchall()
+
+        elif inputCourseId != None:
+            command = "SELECT * FROM courseinfoview WHERE index='{index}';".format(index=inputCourseId)
 
         else:
-            command = "SELECT * FROM courseinfoview WHERE index='{index}';".format(index=inputCourseId)
-            cursor.execute(command)
-            result = cursor.fetchall()
+            command = "SELECT * FROM courseinfoview WHERE coursename LIKE'%{coursename}%';".format(coursename=inputCourseName)
 
+        cursor.execute(command)
+        result = cursor.fetchall()
         list = []
 
         for obj in result:
@@ -234,7 +236,7 @@ def writeNoticeMessage(request):
 
         message = inputMessage
 
-        time = datetime.datetime.now()
+        time = datetime.now()
 
         query = Notice.objects.create(
             user=User.objects.filter(id=inputId).first(),
@@ -459,8 +461,8 @@ def manageCourse(request):
             try:
                 informationQuery = Courseinformation.objects.create(
                     courseindex     = Course.objects.all().last(),
-                    startdate       = datetime.datetime.strptime(inputStartDate,'%Y-%m-%d').date(),
-                    enddate         = datetime.datetime.strptime(inputEndDate,'%Y-%m-%d').date(),
+                    startdate       = datetime.strptime(inputStartDate,'%Y-%m-%d').date(),
+                    enddate         = datetime.strptime(inputEndDate,'%Y-%m-%d').date(),
                        starttime       = inputStartTime.strip(),
                     coursetime      = int(inputRunningTime),
                     classday        = inputClassDay.strip(),
@@ -484,7 +486,7 @@ def manageCourse(request):
 
         #수업 수정시
         elif inputMode == 'modify':
-            inputCourseId = request.POST['courseid']
+            inputCourseId       = request.POST['courseid']
             inputTeacherId      = request.POST['teacher']
             inputRoomIndex      = request.POST['room']
             inputStartDate      = request.POST['startdate']
@@ -501,9 +503,8 @@ def manageCourse(request):
             )
 
             Courseinformation.objects.filter(courseindex=inputCourseId).update(
-                courseindex=Course.objects.all().last(),
-                startdate=datetime.datetime.strptime(inputStartDate, '%Y-%m-%d').date(),
-                enddate=datetime.datetime.strptime(inputEndDate, '%Y-%m-%d').date(),
+                startdate=datetime.strptime(inputStartDate, '%Y-%m-%d').date(),
+                enddate=datetime.strptime(inputEndDate, '%Y-%m-%d').date(),
                 starttime=inputStartTime.strip(),
                 coursetime=int(inputRunningTime),
                 classday=inputClassDay.strip(),
@@ -514,4 +515,75 @@ def manageCourse(request):
     except Exception as e:
         message = 'failed : ' + str(e)
 
+    return HttpResponse(message)
+
+#출석 날짜 목록 출력
+def getCheckDayList(request):
+    try:
+        inputCourseId = request.GET.get('courseid')
+        #시작일부터 오늘까지 출력
+        #0~6 -> 월~목
+
+        courseObject = Courseinformation.objects.filter(courseindex=inputCourseId).first()
+        courseStartDate = datetime.combine(courseObject.startdate, datetime.min.time())
+        today = datetime.today()
+        courseDay = courseObject.classday
+
+        dateList = []
+
+        while courseStartDate <= today:
+
+            if courseDay[courseStartDate.weekday()] == 'T':
+                dateList.append({
+                    'date' : str(courseStartDate.date())
+                })
+
+            courseStartDate += timedelta(days=1)
+
+        message = json.dumps(dateList, ensure_ascii=False)
+
+    except Exception as e:
+        message = 'failed : ' + str(e)
+
+    return HttpResponse(message)
+
+#해당 날짜 출석 목록 출력
+@csrf_exempt
+def getCheckList(request):
+    try:
+        inputCourseId = request.GET.get('courseid')
+        inputDate = request.GET.get('date')
+
+        courseTime = getEndTime(Courseinformation.objects.filter(courseindex=inputCourseId)[0].starttime,
+                                   Courseinformation.objects.filter(courseindex=inputCourseId)[0].coursetime)
+        starttime = courseTime[0].strftime("%H:%M")
+        endtime = courseTime[1].strftime("%H:%M")
+
+        checkList = []
+        students = Coursestudent.objects.filter(couseid=inputCourseId).all()
+        for student in students:
+            if len(Attendancerecord.objects.filter(userid=student.userid, checkdate=inputDate)) == 0:
+                #결석인 경우 이때 새로 만듬
+                checkQuery = Attendancerecord.objects.create(
+                    userid=student.userid,
+                    courseid=Course.objects.filter(index=inputCourseId).first(),
+                    checkdate=inputDate,
+                    checktime=str(courseTime[1].strftime("%H%M"))
+                )
+                checkQuery.save()
+
+            #리스트에 담음
+            checkList.append({
+                'userid' : str(student.userid.id),
+                'name' : str(Userinformation.objects.filter(id=student.userid).first().name),
+                'checked' : str(tardyCheck(starttime,endtime,Attendancerecord.objects.filter
+                (userid=student.userid, courseid=inputCourseId, checkdate=inputDate).first().checktime)),
+                'checktime' :  str(Attendancerecord.objects.filter
+                (userid=student.userid, courseid=inputCourseId, checkdate=inputDate).first().checktime)
+            })
+
+        message = json.dumps(checkList,ensure_ascii=False)
+
+    except Exception as e:
+        message = 'failed : ' + str(e)
     return HttpResponse(message)

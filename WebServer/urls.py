@@ -51,4 +51,8 @@ urlpatterns = [
     url(r'managestudenttocourse/$', views.manageStudentToCourse),
     #수업 관리
     url(r'managecourse/$', views.manageCourse),
+    #출석 날짜 목록 출력
+    url(r'checkdaylist/$', views.getCheckDayList),
+    #날짜별 출석 목록 출력
+    url(r'checklist/$', views.getCheckList),
 ]
