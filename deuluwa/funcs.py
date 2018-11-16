@@ -14,7 +14,7 @@ def getTime(timeStr):
     return time
 
 def tardyCheck(startTime, endTime, time):
-    if time > endTime:
+    if time >= endTime:
         return 2
     elif time > startTime:
         return 1
