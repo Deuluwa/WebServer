@@ -562,7 +562,7 @@ def getCheckList(request):
         checkList = []
         students = Coursestudent.objects.filter(couseid=inputCourseId).all()
         for student in students:
-            if len(Attendancerecord.objects.filter(userid=student.userid, checkdate=inputDate)) == 0:
+            if len(Attendancerecord.objects.filter(userid=student.userid, checkdate=inputDate, courseid=inputCourseId)) == 0:
                 #결석인 경우 이때 새로 만듬
                 checkQuery = Attendancerecord.objects.create(
                     userid=student.userid,
@@ -576,8 +576,8 @@ def getCheckList(request):
             checkList.append({
                 'userid' : str(student.userid.id),
                 'name' : str(Userinformation.objects.filter(id=student.userid).first().name),
-                'checked' : str(tardyCheck(starttime,endtime,Attendancerecord.objects.filter
-                (userid=student.userid, courseid=inputCourseId, checkdate=inputDate).first().checktime)),
+                'checked' : str(tardyCheck(starttime[:2]+starttime[3:],endtime[:2]+endtime[3:],Attendancerecord.objects.filter
+                (userid=student.userid, courseid=inputCourseId, checkdate=inputDate).first().checktime.strip())),
                 'checktime' :  str(Attendancerecord.objects.filter
                 (userid=student.userid, courseid=inputCourseId, checkdate=inputDate).first().checktime)
             })
@@ -586,4 +586,48 @@ def getCheckList(request):
 
     except Exception as e:
         message = 'failed : ' + str(e)
+    return HttpResponse(message)
+
+#출석정보 변경
+@csrf_exempt
+def CorrectAttendanceRecord(request):
+    try:
+        inputCourseId = request.GET.get('courseid')
+        inputDate = request.GET.get('date')
+        inputMode = request.GET.get('mode')
+
+        startTime = Courseinformation.objects.filter(courseindex=inputCourseId).first().starttime
+        courseTime = Courseinformation.objects.filter(courseindex=inputCourseId).first().coursetime
+
+        if inputMode == 'allcheck':
+            Attendancerecord.objects.filter(courseid=inputCourseId, checkdate = inputDate).update(
+                checktime = startTime
+            )
+            message = 'success'
+
+        elif inputMode == 'check' or inputMode == 'tardy' or inputMode == 'absent' or inputMode == 'update':
+            inputUserId = request.GET.get('userid')
+
+            checkTime = startTime
+
+            if inputMode == 'tardy' :
+                checkTime = str(int(checkTime) + 1)
+
+            elif inputMode == 'absent' :
+                checkTime = str(int(checkTime) + courseTime)
+
+            elif inputMode == 'update' :
+                inputUpdateTime = request.GET.get('updatetime')
+                checkTime = inputUpdateTime
+
+            Attendancerecord.objects.filter(courseid=inputCourseId, checkdate = inputDate, userid=inputUserId).update(
+                checktime = checkTime
+            )
+
+            message = 'success'
+        else:
+            message = 'failed'
+    except Exception as e:
+        message = 'failed : ' + str(e)
+
     return HttpResponse(message)

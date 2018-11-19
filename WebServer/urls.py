@@ -55,4 +55,6 @@ urlpatterns = [
     url(r'checkdaylist/$', views.getCheckDayList),
     #날짜별 출석 목록 출력
     url(r'checklist/$', views.getCheckList),
+    #출석상태 변경
+    url(r'updateattendance/$', views.CorrectAttendanceRecord),
 ]

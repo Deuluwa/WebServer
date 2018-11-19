@@ -24,3 +24,4 @@ def makeDateTime(strDate, strTime):
     time = strDate + " " + strTime[:5]
 
     return time
+
